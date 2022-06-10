@@ -1,18 +1,47 @@
 package cs350s22.component.ui.parser;
-
 import java.io.*;
 import java.util.*;
+
 
 import cs350s22.component.sensor.mapper.A_Mapper;
 import cs350s22.component.sensor.reporter.A_Reporter;
 import cs350s22.component.sensor.watchdog.A_Watchdog;
+import cs350s22.message.A_Message;
+import cs350s22.message.actuator.MessageActuatorReportPosition;
+import cs350s22.message.actuator.MessageActuatorRequestPosition;
+import cs350s22.message.ping.MessagePing;
+import cs350s22.component.ui.CommandLineInterface;
+import cs350s22.component.sensor.A_Sensor;
+import cs350s22.component.sensor.mapper.MapperEquation;
+import cs350s22.component.sensor.mapper.MapperInterpolation;
+import cs350s22.component.sensor.mapper.function.equation.EquationNormalized;
+import cs350s22.component.sensor.mapper.function.equation.EquationPassthrough;
+import cs350s22.component.sensor.mapper.function.equation.EquationScaled;
+import cs350s22.component.sensor.mapper.function.interpolator.InterpolationMap;
+import cs350s22.component.sensor.mapper.function.interpolator.InterpolatorLinear;
+import cs350s22.component.sensor.mapper.function.interpolator.InterpolatorSpline;
+import cs350s22.component.sensor.mapper.function.interpolator.loader.MapLoader;
+import cs350s22.component.sensor.reporter.ReporterChange;
+import cs350s22.component.sensor.reporter.ReporterFrequency;
+import cs350s22.component.sensor.watchdog.WatchdogAcceleration;
+import cs350s22.component.sensor.watchdog.WatchdogBand;
+import cs350s22.component.sensor.watchdog.WatchdogHigh;
+import cs350s22.component.sensor.watchdog.WatchdogLow;
+import cs350s22.component.sensor.watchdog.WatchdogNotch;
+import cs350s22.component.sensor.watchdog.mode.A_WatchdogMode;
+import cs350s22.component.sensor.watchdog.mode.WatchdogModeAverage;
+import cs350s22.component.sensor.watchdog.mode.WatchdogModeInstantaneous;
+import cs350s22.component.sensor.watchdog.mode.WatchdogModeStandardDeviation;
 import cs350s22.support.*;
+import cs350s22.test.ActuatorPrototype;
 import cs350s22.test.MySensor;
 
 public class Parser{
 	//Variable List
 	public A_ParserHelper parserHelper;
 	public String commandText;
+    private String[] tokens;
+
 	
 	//CONSTRUCTORS
 	public Parser(A_ParserHelper parserHelper, String commandText){
@@ -81,14 +110,14 @@ public class Parser{
 		    this.parserHelper.run(output);
 		}
 		if(parserCheck.equals("@CONFIGURE")){
-			//Insert Code Here
+			//CODE HERE
 		}
 		if(parserCheck.equals("BUILD")){
-			//Insert Code Here
+			//CODE HERE
 		}
 	}
 
-	public void treeCreate(String input) {
+	public void treeCreate(String input) throws IOException {
 		String parserCheck = null;
 		String output = null;
 		
@@ -103,28 +132,49 @@ public class Parser{
 	    //Navigation Tree
 	  	if(parserCheck.equals("ACTUATOR")){
 	  	    //Insert Code Here
-	  		//SymbolTable<A_Reporter>.get(sensor);
-	  	}
-	  	else if(parserCheck.equals("CONTROLLER")) {
-	  		//Insert Code Here
+	  		createActuator(output);
 	  	}
 	  	else if(parserCheck.equals("DEPENDENCY")) {
 	  		//Insert Code Here
 	  	}
 	  	else if(parserCheck.equals("MAPPER")) {
 	  		//Insert Code Here
+	  		createMapper(output);
 	  	}
 	  	else if(parserCheck.equals("REPORTER")) {
 	  		//Insert Code Here
+	  		createReporter(output);
 	  	}
 	  	else if(parserCheck.equals("SENSOR")) {
+	  		//Insert Code Here
 	  		createSensor(output);
 	  	}
 	  	else if(parserCheck.equals("WATCHDOG")) {
 	  		//Insert Code Here
+	  		String[] splitSub = output.split(" ", 2);
+	  		if(splitSub[0] == "ACCELERATION")
+	  		{
+	  			createWatchdogAcceleration(splitSub[1]);
+	  		}
+	  		else if(splitSub[0] == "BAND")
+	  		{
+	  			createWatchdogBand(splitSub[1]);
+	  		}
+	  		else if(splitSub[0] == "NOTCH")
+	  		{
+	  			createWatchdogNotch(splitSub[1]);
+	  		}
+	  		else if(splitSub[0] == "LOW")
+	  		{
+	  			createWatchdogLow(splitSub[1]);
+	  		}
+	  		else if(splitSub[0] == "HIGH")
+	  		{
+	  			createWatchdogHigh(splitSub[1]);
+	  		}
 	  	}
 	}
-	
+
 	public void treeSend(String input) {
 		String parserCheck = null;
 		String output = null;
@@ -141,10 +191,551 @@ public class Parser{
 	    
 	}
 	
+//--------------------------------------------------------------------------------------
+	
+	public void createWatchdogAcceleration(String input)
+	{
+		String[] splitArray = input.split(" ", 0);
+		Identifier watchdogName = Identifier.make(splitArray[0]);
+		
+		int average = 0;
+		int standardDev = 0;
+		
+		double low;
+		double high;
+		
+		int grace;
+		
+		for(int i = 1; i < splitArray.length; i ++)
+		{
+			if(splitArray[i] == "INSTANTANEOUS")
+			{
+				i ++;
+				i ++;
+				low = Double.parseDouble(splitArray[i]);
+				i ++;
+				high = Double.parseDouble(splitArray[i]);
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeInstantaneous();
+					WatchdogAcceleration w = new WatchdogAcceleration(low, high, mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeInstantaneous();
+				WatchdogAcceleration w = new WatchdogAcceleration(low, high, mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+			else if(splitArray[i] == "AVERAGE")
+			{
+				if(splitArray[i+1] != "THRESHOLD")
+				{
+					average = Integer.parseInt(splitArray[i + 1]);
+					i ++;
+				}
+				
+				i ++;
+				i ++;
+				low = Double.parseDouble(splitArray[i]);
+				i ++;
+				high = Double.parseDouble(splitArray[i]);
+				
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeAverage(average);
+					WatchdogAcceleration w = new WatchdogAcceleration(low, high, mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeAverage(average);
+				WatchdogAcceleration w = new WatchdogAcceleration(low, high, mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+			else if(splitArray[i] == "STANDARD" && splitArray[i+1] == "DEVIATION")
+			{
+				i ++;
+				
+				if(splitArray[i+1] != "THRESHOLD")
+				{
+					standardDev = Integer.parseInt(splitArray[i + 1]);
+					i ++;
+				}
+				
+				i ++;
+				i ++;
+				low = Double.parseDouble(splitArray[i]);
+				i ++;
+				high = Double.parseDouble(splitArray[i]);
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeStandardDeviation(standardDev);
+					WatchdogAcceleration w = new WatchdogAcceleration(low, high, mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeStandardDeviation(standardDev);
+				WatchdogAcceleration w = new WatchdogAcceleration(low, high, mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+		}
+		
+	}
+	
+	public void createWatchdogBand(String input)
+	{
+		String[] splitArray = input.split(" ", 0);
+		Identifier watchdogName = Identifier.make(splitArray[0]);
+		
+		int average = 0;
+		int standardDev = 0;
+		
+		double low;
+		double high;
+		
+		int grace;
+		
+		for(int i = 1; i < splitArray.length; i ++)
+		{
+			if(splitArray[i] == "INSTANTANEOUS")
+			{
+				i ++;
+				i ++;
+				low = Double.parseDouble(splitArray[i]);
+				i ++;
+				high = Double.parseDouble(splitArray[i]);
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeInstantaneous();
+					WatchdogBand w = new WatchdogBand(low, high, mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeInstantaneous();
+				WatchdogBand w = new WatchdogBand(low, high, mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+			else if(splitArray[i] == "AVERAGE")
+			{
+				if(splitArray[i+1] != "THRESHOLD")
+				{
+					average = Integer.parseInt(splitArray[i + 1]);
+					i ++;
+				}
+				i ++;
+				i ++;
+				low = Double.parseDouble(splitArray[i]);
+				i ++;
+				high = Double.parseDouble(splitArray[i]);
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeAverage(average);
+					WatchdogBand w = new WatchdogBand(low, high, mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeAverage(average);
+				WatchdogBand w = new WatchdogBand(low, high, mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+			else if(splitArray[i] == "STANDARD" && splitArray[i+1] == "DEVIATION")
+			{
+				i ++;
+				if(splitArray[i+1] != "THRESHOLD")
+				{
+					standardDev = Integer.parseInt(splitArray[i + 1]);
+					i ++;
+				}
+				i ++;
+				i ++;
+				low = Double.parseDouble(splitArray[i]);
+				i ++;
+				high = Double.parseDouble(splitArray[i]);
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeStandardDeviation(standardDev);
+					WatchdogBand w = new WatchdogBand(low, high, mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeStandardDeviation(standardDev);
+				WatchdogBand w = new WatchdogBand(low, high, mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+		}
+	}
+	
+	public void createWatchdogNotch(String input)
+	{
+		String[] splitArray = input.split(" ", 0);
+		Identifier watchdogName = Identifier.make(splitArray[0]);
+		
+		int average = 0;
+		int standardDev = 0;
+		
+		double low;
+		double high;
+		
+		int grace;
+		
+		for(int i = 1; i < splitArray.length; i ++)
+		{
+			if(splitArray[i] == "INSTANTANEOUS")
+			{
+				i ++;
+				i ++;
+				low = Double.parseDouble(splitArray[i]);
+				i ++;
+				high = Double.parseDouble(splitArray[i]);
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeInstantaneous();
+					WatchdogNotch w = new WatchdogNotch(low, high, mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeInstantaneous();
+				WatchdogNotch w = new WatchdogNotch(low, high, mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+			else if(splitArray[i] == "AVERAGE")
+			{
+				if(splitArray[i+1] != "THRESHOLD")
+				{
+					average = Integer.parseInt(splitArray[i + 1]);
+					i ++;
+				}
+				i ++;
+				i ++;
+				low = Double.parseDouble(splitArray[i]);
+				i ++;
+				high = Double.parseDouble(splitArray[i]);
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeAverage(average);
+					WatchdogNotch w = new WatchdogNotch(low, high, mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeAverage(average);
+				WatchdogNotch w = new WatchdogNotch(low, high, mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+			else if(splitArray[i] == "STANDARD" && splitArray[i+1] == "DEVIATION")
+			{
+				i ++;
+				if(splitArray[i+1] != "THRESHOLD")
+				{
+					standardDev = Integer.parseInt(splitArray[i + 1]);
+					i ++;
+				}
+				i ++;
+				i ++;
+				low = Double.parseDouble(splitArray[i]);
+				i ++;
+				high = Double.parseDouble(splitArray[i]);
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeStandardDeviation(standardDev);
+					WatchdogNotch w = new WatchdogNotch(low, high, mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeStandardDeviation(standardDev);
+				WatchdogNotch w = new WatchdogNotch(low, high, mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+		}
+	}
+	
+	public void createWatchdogLow(String input)
+	{
+		String[] splitArray = input.split(" ", 0);
+		Identifier watchdogName = Identifier.make(splitArray[0]);
+		
+		int average = 0;
+		int standardDev = 0;
+		int threshold = 0;
+		
+		int grace;
+		
+		for(int i = 1; i < splitArray.length; i ++)
+		{
+			if(splitArray[i] == "INSTANTANEOUS")
+			{
+				i ++;
+				threshold = Integer.parseInt(splitArray[i + 1]);
+				
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeInstantaneous();
+					WatchdogLow w = new WatchdogLow(threshold,mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeInstantaneous();
+				WatchdogLow w = new WatchdogLow(threshold,mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+			if(splitArray[i] == "AVERAGE")
+			{
+				if(splitArray[i + 1] != "THRESHOLD")
+				{
+					average = Integer.parseInt(splitArray[i + 1]);
+					i ++;
+				}
+				
+				i ++;
+				threshold = Integer.parseInt(splitArray[i + 1]);
+				
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeAverage(average);
+					WatchdogLow w = new WatchdogLow(threshold,mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeAverage(average);
+				WatchdogLow w = new WatchdogLow(threshold,mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+			if(splitArray[i] == "STANDARD" && splitArray[i+1] == "DEVIATION")
+			{
+				i ++;
+				if(splitArray[i + 1] != "THRESHOLD")
+				{
+					standardDev = Integer.parseInt(splitArray[i + 1]);
+					i ++;
+				}
+				
+				i ++;
+				threshold = Integer.parseInt(splitArray[i + 1]);
+				
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeStandardDeviation(standardDev);
+					WatchdogLow w = new WatchdogLow(threshold,mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeStandardDeviation(standardDev);
+				WatchdogLow w = new WatchdogLow(threshold,mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+		}
+	}
+	
+	public void createWatchdogHigh(String input)
+	{
+		String[] splitArray = input.split(" ", 0);
+		Identifier watchdogName = Identifier.make(splitArray[0]);
+		
+		int average = 0;
+		int standardDev = 0;
+		int threshold = 0;
+		
+		int grace;
+		
+		for(int i = 1; i < splitArray.length; i ++)
+		{
+			if(splitArray[i] == "INSTANTANEOUS")
+			{
+				i ++;
+				threshold = Integer.parseInt(splitArray[i + 1]);
+				
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeInstantaneous();
+					WatchdogHigh w = new WatchdogHigh(threshold,mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeInstantaneous();
+				WatchdogHigh w = new WatchdogHigh(threshold,mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+			if(splitArray[i] == "AVERAGE")
+			{
+				if(splitArray[i + 1] != "THRESHOLD")
+				{
+					average = Integer.parseInt(splitArray[i + 1]);
+					i ++;
+				}
+				
+				i ++;
+				threshold = Integer.parseInt(splitArray[i + 1]);
+				
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeAverage(average);
+					WatchdogHigh w = new WatchdogHigh(threshold,mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeAverage(average);
+				WatchdogHigh w = new WatchdogHigh(threshold,mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+			if(splitArray[i] == "STANDARD" && splitArray[i+1] == "DEVIATION")
+			{
+				i ++;
+				if(splitArray[i + 1] != "THRESHOLD")
+				{
+					standardDev = Integer.parseInt(splitArray[i + 1]);
+					i ++;
+				}
+				
+				i ++;
+				threshold = Integer.parseInt(splitArray[i + 1]);
+				
+				if(splitArray[i + 1] == "GRACE")
+				{
+					grace = Integer.parseInt(splitArray[i + 2]);
+					
+					A_WatchdogMode mode = new WatchdogModeStandardDeviation(standardDev);
+					WatchdogHigh w = new WatchdogHigh(threshold,mode, grace);
+					parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+				}
+				
+				A_WatchdogMode mode = new WatchdogModeStandardDeviation(standardDev);
+				WatchdogHigh w = new WatchdogHigh(threshold,mode);
+				parserHelper.getSymbolTableWatchdog().add(watchdogName, w);
+			}
+		}
+	}
+	
+//--------------------------------------------------------------------------------------
+	
+	public void createReporter(String input)
+	{
+		String[] splitArray = input.split(" ", 0);
+		Identifier reporterName = Identifier.make(splitArray[0]);
+		int delta = 0;
+		int frequency = 0;
+		
+		List<Identifier> reporterIDs = null;
+		List<Identifier> reporterGroups = null;
+		int reporterIDSlot = 0;
+		int reporterGroupSlot = 0;
+    	
+		
+		if(splitArray[0] == "FREQUENCY")
+		{
+	    	for(int scan = 3; scan < splitArray.length; scan++) {
+	    		if(splitArray[scan].equals("IDS")) {
+	    			reporterIDSlot = scan;
+	    		}
+	    		else if(splitArray[scan].equals("GROUPS")) {
+	    			reporterGroupSlot = scan;
+	    		}
+	    	}
+			
+			for(int i = 3; i < splitArray.length; i++) {
+	    		if(splitArray[i].equals("IDS")) {
+	    			
+	    			if(reporterIDSlot != 0) {
+	    				for(int j = i+1; j < reporterIDSlot; j++) {
+	    					Identifier val = Identifier.make(splitArray[j]);
+	    					reporterIDs.add(val);
+	    					
+	    				}
+	    			}
+	    		}
+	    		else if(splitArray[i].equals("GROUPS"))
+	    		{
+	    			if(reporterGroupSlot != 0) {
+	    				for(int j = i+1; j < reporterGroupSlot; j++) {
+	    					Identifier val = Identifier.make(splitArray[j]);
+	    					reporterGroups.add(val);
+	    					
+	    				}
+	    			}
+	    		}
+	    		if(splitArray[i].equals("FREQUENCY")) {	//Once we find the "FREQUENCY" term
+		   			
+	    			frequency = Integer.parseInt(splitArray[i+1]);
+					
+	    		}
+			}
+			
+			ReporterFrequency r = new ReporterFrequency(reporterIDs, reporterGroups, frequency);
+			parserHelper.getSymbolTableReporter().add(reporterName, r);
+		}
+		
+		else if(splitArray[0] == "CHANGE")
+		{
+			for(int scan = 3; scan < splitArray.length; scan++) {
+	    		if(splitArray[scan].equals("IDS")) {
+	    			reporterIDSlot = scan;
+	    		}
+	    		else if(splitArray[scan].equals("GROUPS")) {
+	    			reporterGroupSlot = scan;
+	    		}
+	    	}
+			
+			for(int i = 3; i < splitArray.length; i++) {
+				if(splitArray[i].equals("IDS")) {
+	    			
+	    			if(reporterIDSlot != 0) {
+	    				for(int j = i+1; j < reporterIDSlot; j++) {
+	    					Identifier val = Identifier.make(splitArray[j]);
+	    					reporterIDs.add(val);
+	    					
+	    				}
+	    			}
+	    		}
+	    		else if(splitArray[i].equals("GROUPS"))
+	    		{
+	    			if(reporterGroupSlot != 0) {
+	    				for(int j = i+1; j < reporterGroupSlot; j++) {
+	    					Identifier val = Identifier.make(splitArray[j]);
+	    					reporterGroups.add(val);
+	    					
+	    				}
+	    			}
+	    		}
+	    		if(splitArray[i].equals("DELTA")) {	//Once we find the "DELTA" term
+		   			
+	    			delta = Integer.parseInt(splitArray[i+1]);
+					
+	    		}
+			}
+			
+			ReporterChange r = new ReporterChange(reporterIDs, reporterGroups, delta);
+			parserHelper.getSymbolTableReporter().add(reporterName, r);
+		}
+	}
+
+//--------------------------------------------------------------------------------------
+	
 	public void createSensor(String input){
-		
-		String output = null;
-		
 		//Split off leading term into first slot of array
 		String[] splitArray = input.split(" ", 0);
 		
@@ -196,6 +787,7 @@ public class Parser{
 	    		//parserHelper.getSymbolTableSensor().add(sensorName, s);
 	    		//parserHelper.getSymbolTableReporter().get(variableName);
 	    		if(splitArray[i].equals("REPORTERS")) {
+	    			//NOTE COULD BE REPORTER OR REPORTERS
 	    			if(watchdogSlot != 0) {
 	    				for(int j = i+1; j < watchdogSlot; j++) {
 	    					Identifier val = Identifier.make(splitArray[j]);
@@ -223,6 +815,7 @@ public class Parser{
 	    			}
 	    		}
 	    		if(splitArray[i].equals("WATCHDOGS")) {
+	    			//NOTE COULD BE WATCHDOGS OR WATCHDOG
 	    			if (mapperSlot != 0) {
 	    				for(int j = i+1; j < mapperSlot; j++) {
 	    					Identifier val = Identifier.make(splitArray[j]);
@@ -264,5 +857,234 @@ public class Parser{
 		    	System.out.println("Sensor s2 Added to Table");
 	    	}
 	    }
-	}	    
+	}//end createSensor
+
+//--------------------------------------------------------------------------------------
+	
+	public void createActuator(String input) {
+		//Variable List
+		String myName = null;
+		Identifier myGroup = null;
+    	List<Identifier> actuatorGroups= null;
+		
+    	A_Sensor mySensor = null;
+    	List<A_Sensor> sensorGroups= null;
+    	
+		double accelLeadin = 0.0;
+		double accelLeadout = 0.0;
+		double accelRelax = 0.0;
+		double initValue = 0.0;
+		double velocityLimit = 0.0;
+		double minValue = 0.0;
+		double maxValue = 0.0;
+		double jerkLimit = 0.0;
+		
+		//Split up input into an array we can traverse
+		String[] splitArray = input.split(" ", 0);
+		
+		//Pull out locations that we know for sure
+		myName = splitArray[1];
+		Identifier actuatorName = Identifier.make(myName);
+		
+		
+		//Variables for Labels
+		int sensorSlot = 0;
+		int accelSlot = 0;
+		
+		//Get label locations for easier traversal
+		//Also, get simple terms extracted when possible
+		for(int scan = 0; scan < splitArray.length; scan++) {
+			if(splitArray[scan].equals("SENSOR") || splitArray[scan].equals("SENSORS")) {
+				sensorSlot = scan;
+			}
+			if(splitArray[scan].equals("ACCELERATION")) {
+				accelSlot = scan;
+			}
+			if(splitArray[scan].equals("LEADIN")) {
+				accelLeadin = Double.parseDouble(splitArray[scan + 1]);
+			}
+			if(splitArray[scan].equals("LEADOUT")) {
+				accelLeadout = Double.parseDouble(splitArray[scan + 1]);
+			}
+			if(splitArray[scan].equals("RELAX")) {
+				accelRelax = Double.parseDouble(splitArray[scan + 1]);
+			}
+			if(splitArray[scan].equals("VELOCITY")) {
+				velocityLimit = Double.parseDouble(splitArray[scan + 2]);
+			}
+			if(splitArray[scan].equals("MIN")) {
+				minValue = Double.parseDouble(splitArray[scan + 1]);
+			}
+			if(splitArray[scan].equals("MAX")) {
+				maxValue = Double.parseDouble(splitArray[scan + 1]);
+			}
+			if(splitArray[scan].equals("INITIAL")) {
+				initValue = Double.parseDouble(splitArray[scan + 1]);
+			}
+			if(splitArray[scan].equals("JERK")) {
+				jerkLimit = Double.parseDouble(splitArray[scan + 2]);
+			}
+		}
+		
+		//Get Group List + Sensor List
+		for(int i = 2; i < sensorSlot; i++) {
+			myGroup = Identifier.make(splitArray[i]);
+			actuatorGroups.add(myGroup);
+		}
+		for(int i = sensorSlot + 1; i < accelSlot; i++) {
+			Identifier val = Identifier.make(splitArray[i]);
+			
+			mySensor = parserHelper.getSymbolTableSensor().get(val);
+			sensorGroups.add(mySensor);
+		}
+		
+		ActuatorPrototype a = new ActuatorPrototype(actuatorName, actuatorGroups, accelLeadin, accelLeadout, accelRelax, velocityLimit, initValue, minValue, maxValue, jerkLimit, sensorGroups);
+		System.out.println("Actuator Created");
+    	parserHelper.getSymbolTableActuator().add(actuatorName, a);
+    	System.out.println("Actuator Added to Table");
+	}//end createActuator
+	
+//--------------------------------------------------------------------------------------
+	
+	public void createMapper(String input) throws IOException{		//This should cover C1 - C4 all at once!
+		//Split input into searchable array
+		String[] splitArray = input.split(" ", 0);
+		
+		//The first term will always be the name
+		Identifier mapperName = Identifier.make(splitArray[0]);
+		
+		//The first substantial difference is with term 3
+		if(splitArray[2].equals("PASSTHROUGH")) {
+			//We know everything we need and can start on the end-result!
+			EquationPassthrough math = new EquationPassthrough();
+			MapperEquation newMapper = new MapperEquation(math);
+			parserHelper.getSymbolTableMapper().add(mapperName, newMapper);
+		}
+		if(splitArray[2].equals("SCALE")) {
+			//We know everything we need, extract scale value and start on the end result!
+			double scaleValue = Double.parseDouble(splitArray[3]);
+			EquationScaled math = new EquationScaled(scaleValue);
+			MapperEquation newMapper = new MapperEquation(math);
+			parserHelper.getSymbolTableMapper().add(mapperName, newMapper);
+		}
+		if(splitArray[2].equals("NORMALIZE")) {
+			//We know everything we need, extract two values and start on the end result!
+			double minValue = Double.parseDouble(splitArray[3]);
+			double maxValue = Double.parseDouble(splitArray[4]);
+			EquationNormalized math = new EquationNormalized(minValue, maxValue);
+			MapperEquation newMapper = new MapperEquation(math);
+			parserHelper.getSymbolTableMapper().add(mapperName, newMapper);
+		}
+		if(splitArray[2].equals("LINEAR") || splitArray[2].equals("SPLINE")) {
+			//Extract file name,create "Filespec" from it, and from there, the mapLoader
+			Filespec myFile = new Filespec(splitArray[4]);
+			MapLoader myLoader = new MapLoader(myFile);
+			InterpolationMap myMap = myLoader.load();
+			
+			//Get correct interpolator
+			if(splitArray[2].equals("LINEAR")) {
+				InterpolatorLinear myReader = new InterpolatorLinear(myMap);
+				MapperInterpolation newMapper = new MapperInterpolation(myReader);
+				parserHelper.getSymbolTableMapper().add(mapperName, newMapper);
+			}
+			if(splitArray[2].equals("SPLINE")) {
+				InterpolatorSpline myReader = new InterpolatorSpline(myMap);
+				MapperInterpolation newMapper = new MapperInterpolation(myReader);
+				parserHelper.getSymbolTableMapper().add(mapperName, newMapper);
+			}
+		}
+	}
+	
+	 public void sendMessage(Scanner sc)
+	    {
+		 	ArrayList<Identifier> id = new ArrayList<Identifier>();
+			ArrayList<Identifier> group = new ArrayList<Identifier>();
+	        ArrayList<Identifier> currList = new ArrayList<Identifier>();
+        	
+	        
+			System.out.println("SENDING MESSAGE...");
+	        
+	        CommandLineInterface cli = parserHelper.getCommandLineInterface();
+	        
+	        if(tokens[2].matches("PING")) {
+	        	
+	        	System.out.println("SENDING PING");
+	        	
+	        	MessagePing ping = new MessagePing();
+	        	cli.issueMessage(ping);
+	        	parserHelper.getCommandLineInterface().issueMessage(ping);
+	        	
+	        }
+	        else if(tokens[tokens.length-2].matches("REQUEST")) {
+
+
+			String curr = "";
+			
+
+			while(sc.hasNext()) {
+				curr = sc.next(); 
+
+				if(curr.equals("ID") || curr.equals("IDS")) {
+					currList = id;
+					
+				}
+				 
+				else if(curr.equals("GROUP") || curr.equals("GROUPS")) {
+					currList = group; 
+					
+				}
+
+				else if(curr.equals("POSITION")) {
+					break; 
+					
+				}
+
+				else {
+					
+					currList.add(Identifier.make(curr)); 
+					
+				}
+			 }
+	        }
+	        else if(tokens[tokens.length-1].matches("REPORT")) {
+
+			boolean isRequest = (sc.next().equals("REQUEST"));
+			double value = 0; 
+			
+
+			if(sc.hasNextDouble()) {
+				value = sc.nextDouble();
+			}
+			ArrayList<Identifier> listOutput; 
+			listOutput = (id.size() > 0) ? id : group; 
+
+			
+			if(!isRequest) {
+				if(id.size() > 0) {
+				//get message from actuator	
+					cli.issueMessage(new MessageActuatorRequestPosition(id, value)); 
+					
+				}
+				if(group.size() > 0) {
+					A_Message message = new MessageActuatorRequestPosition(id, value);
+					cli.issueMessage(message);
+				}
+				
+			}
+			else {
+				if(id.size() > 0) {
+
+					A_Message message = new MessageActuatorRequestPosition(id, value);
+					cli.issueMessage(message);
+				}
+				if(group.size() > 0) {
+
+					A_Message message = new MessageActuatorRequestPosition(group, value, 0);
+					cli.issueMessage(message);
+				}
+				
+				
+			}
+	      }
+	    }
 }
