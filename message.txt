@@ -1,0 +1,85 @@
+import cs350s22.message.A_Message;
+import cs350s22.message.actuator.MessageActuatorReportPosition;
+import cs350s22.message.actuator.MessageActuatorRequestPosition;
+import cs350s22.message.ping.MessagePing;
+import cs350s22.support.Identifier;
+import cs350s22.component.ui.CommandLineInterface;
+
+ public void sendMessage()
+	    {
+	        System.out.println("SENDING MESSAGE...");
+	        
+	        CommandLineInterface cli = parserHelper.getCommandLineInterface();
+	        
+	        if(tokens[2].matches("PING")) {
+	        	
+	        	System.out.println("SENDING PING");
+	        	
+	        	MessagePing ping = new MessagePing();
+	        	cli.issueMessage(ping);
+			parserHelper.getCommandLineInterface().issueMessage(ping);
+	        	
+	        }
+	        else if(tokens[tokens.length-2].matches("REQUEST")) {
+	        	
+	        	double value = Double.parseDouble(tokens[tokens.length-1]);
+	        	A_Message message = new MessageActuatorRequestPosition(id);
+	        	A_Message message = new MessageActuatorRequestPosition(group);
+	        	cli.issueMessage(message); 
+	        	for(int i = 0; i < value.length; i++)
+				if(value[i]equals("id"))
+				
+				cli.issueMessage(request);
+	        	
+	        }
+	        else if(tokens[tokens.length-1].matches("REPORT")) {
+	        	double value = Double.parseDouble(tokens[tokens.length-1]);
+	        	A_Message message = new MessageActuatorRequestPosition(id);
+			A_Message message = new MessageActuatorRequestPosition(group);
+	        	cli.issueMessage(message); 	
+	        
+			for(int i = 0; i < value.length; i++)
+				if(value[i]equals("id"))
+					for(int j = i + 1, j < GroupSlot, j++)
+						IDlist.add;
+						GroupSlot.add;
+						
+						cli.issueMessage(report);	
+	        	
+	        }
+
+	    }
+		for(int i= 0; i < array.lenth; i++)
+			if(array[i].equals("ID")
+					variable = 1;
+		for(int i = 0; i < array.lenth; i++)
+			if(array[i]equals("id"))
+				for(int j = i + 1, j GroupSlot, j++)
+					IDlist.add;
+
+
+    public static void messageCommand(A_ParserHelper parserHelper, String[] commandText){
+        for (int i = 2; i < commandText.length; i++)
+        {
+            switch (commandText[i])
+            {
+                case "ping":
+                    MessagePing ping = new MessagePing();
+                    parserHelper.getCommandLineInterface().issueMessage(ping);
+                    break;
+                case "id":
+                    Identifier id = Identifier.make(commandText[i + 1]);
+                    i++;
+                    break;
+                case "group":
+                    break;
+                case "position":
+                    switch (commandText[i+1])
+                    {
+                        case "request":
+                            break;
+                        case "report":
+                            break;
+                    }
+                    break;
+            }
